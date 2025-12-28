@@ -4,11 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
   <meta name="theme-color" content="#0c0a09" />
-  <title>炒菜修炼 3D v0.1</title>
+  <title>炒菜修炼 3D v0.2</title>
 
-  <!-- PWA -->
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="https://dummyimage.com/192x192/111/fff&text=Cook" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
@@ -16,32 +14,128 @@
     html, body { height:100%; margin:0; background:#0c0a09; color:#fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
     .safe-top { padding-top: calc(env(safe-area-inset-top) + 10px); }
     .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 10px); }
+
     #wrap { height:100%; display:flex; flex-direction:column; }
     #topbar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 12px 8px; }
-    #main { flex:1; display:grid; grid-template-columns: 1fr 340px; gap:12px; padding: 0 12px 12px; }
-    @media (max-width: 980px) { #main { grid-template-columns: 1fr; } }
+    .title { font-size:15px; font-weight:900; }
+    .muted { color: rgba(255,255,255,0.65); font-size:12px; line-height:1.4; }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 
+    #main {
+      flex:1;
+      display:grid;
+      grid-template-columns: 300px 1fr 360px;
+      gap:12px;
+      padding: 0 12px 12px;
+      min-height: 0;
+    }
+    @media (max-width: 1100px) { #main { grid-template-columns: 1fr; } }
+
+    .card {
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:18px;
+      background: rgba(255,255,255,0.03);
+      padding:12px;
+      min-height: 0;
+    }
+
+    /* 3D view */
     #view3d { position:relative; border:1px solid rgba(255,255,255,0.10); border-radius:18px; overflow:hidden; background:#0b0a09; min-height: 380px; }
-    #hud { position:absolute; left:12px; top:12px; right:12px; display:flex; justify-content:space-between; pointer-events:none; }
+    #hud { position:absolute; left:12px; top:12px; right:12px; display:flex; justify-content:space-between; pointer-events:none; gap:8px; flex-wrap:wrap; }
     .chip { pointer-events:none; padding:8px 10px; border-radius:999px; background: rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.10); font-size:12px; }
     #canvas { width:100%; height:100%; display:block; }
 
-    #panel { border:1px solid rgba(255,255,255,0.10); border-radius:18px; padding:12px; background: rgba(255,255,255,0.03); }
+    /* Buttons / inputs */
     .row { display:flex; gap:10px; align-items:center; margin:10px 0; }
-    .btn { cursor:pointer; border:none; padding:10px 12px; border-radius:12px; background:#e7e5e4; color:#0c0a09; font-weight:700; }
-    .btn.secondary { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.16); font-weight:600; }
+    .btn { cursor:pointer; border:none; padding:10px 12px; border-radius:12px; background:#e7e5e4; color:#0c0a09; font-weight:800; }
+    .btn.secondary { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.16); font-weight:700; }
+    .btn.small { padding:6px 8px; border-radius:10px; font-size:12px; font-weight:800; }
     .btn:disabled { opacity:0.45; cursor:not-allowed; }
-    input[type="range"]{ width:100%; }
-    textarea { width:100%; min-height:120px; border-radius:12px; padding:10px; background:#0c0a09; color:#fff; border:1px solid rgba(255,255,255,0.12); outline:none; }
-    select, input[type="text"]{ width:100%; border-radius:12px; padding:10px; background:#0c0a09; color:#fff; border:1px solid rgba(255,255,255,0.12); outline:none; }
 
-    .title { font-size:15px; font-weight:800; }
-    .muted { color: rgba(255,255,255,0.65); font-size:12px; line-height:1.4; }
+    input[type="range"]{ width:100%; }
+    input[type="number"], input[type="text"], select {
+      width:100%;
+      border-radius:12px;
+      padding:10px;
+      background:#0c0a09;
+      color:#fff;
+      border:1px solid rgba(255,255,255,0.12);
+      outline:none;
+    }
+    textarea {
+      width:100%;
+      min-height:120px;
+      border-radius:12px;
+      padding:10px;
+      background:#0c0a09;
+      color:#fff;
+      border:1px solid rgba(255,255,255,0.12);
+      outline:none;
+      resize: vertical;
+    }
+
     .hr { height:1px; background: rgba(255,255,255,0.10); margin:12px 0; }
 
+    /* Assets */
+    .seg { display:flex; gap:8px; }
+    .seg button {
+      flex:1; padding:8px 10px; border-radius:12px;
+      border:1px solid rgba(255,255,255,0.16);
+      background: transparent; color:#fff; font-weight:800; cursor:pointer;
+    }
+    .seg button.active { background:#e7e5e4; color:#0c0a09; border-color:#e7e5e4; }
+
+    .grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
+    .asset {
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius:14px;
+      padding:10px;
+      background: rgba(0,0,0,0.25);
+      display:flex;
+      gap:10px;
+      align-items:center;
+      user-select:none;
+    }
+    .asset .thumb {
+      width:46px; height:46px; border-radius:12px;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.06);
+      display:flex; align-items:center; justify-content:center;
+      overflow:hidden;
+      flex:0 0 auto;
+      font-size:24px;
+    }
+    .asset img { width:100%; height:100%; object-fit:cover; display:block; }
+    .asset .meta { flex:1; min-width:0; }
+    .asset .name { font-weight:900; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .asset .type { font-size:11px; color: rgba(255,255,255,0.6); }
+
+    /* Drop zones */
+    .zones { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+    @media (max-width: 1100px) { .zones { grid-template-columns: 1fr; } }
+
+    .zone {
+      border:1px dashed rgba(255,255,255,0.22);
+      border-radius:16px;
+      padding:10px;
+      background: rgba(0,0,0,0.22);
+      min-height: 88px;
+    }
+    .zone.active { border-color: rgba(231,229,228,0.85); box-shadow: 0 0 0 2px rgba(231,229,228,0.18) inset; }
+    .zone .ztitle { font-weight:900; font-size:13px; display:flex; justify-content:space-between; }
+    .zone .zlist { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
+    .tag {
+      font-size:12px;
+      padding:6px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+    }
+
+    /* Step box */
     .stepBox { border:1px solid rgba(255,255,255,0.10); border-radius:14px; padding:10px; background: rgba(0,0,0,0.25); }
     .stepLine { display:flex; justify-content:space-between; gap:10px; }
-    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .logBox { max-height: 170px; overflow:auto; }
   </style>
 </head>
 
@@ -49,13 +143,42 @@
   <div id="wrap">
     <div id="topbar">
       <div>
-        <div class="title">炒菜修炼 3D v0.1</div>
+        <div class="title">炒菜修炼 3D v0.2（拖拽素材 + 动作面板）</div>
         <div class="muted" id="levelText">等级：入灶期 · XP 0</div>
       </div>
       <button class="btn secondary" id="btnReset">重置本地数据</button>
     </div>
 
     <div id="main">
+      <!-- 左：素材库 -->
+      <div class="card" style="display:flex; flex-direction:column; gap:10px; overflow:auto;">
+        <div class="title" style="font-size:14px">素材库（A内置 / B可上传图）</div>
+
+        <div class="seg">
+          <button id="tabIng" class="active">食材</button>
+          <button id="tabSea">调料</button>
+        </div>
+
+        <input id="assetSearch" type="text" placeholder="搜索：肉/葱/盐/糖..." />
+
+        <div class="muted">拖拽卡片到右侧「锅/碗/砧板」区域即可。</div>
+
+        <div class="grid" id="assetGrid"></div>
+
+        <div class="hr"></div>
+
+        <div class="title" style="font-size:14px">导入菜谱文本</div>
+        <div class="muted">识别 1、2、3… 编号步骤；识别火力词（小火/中火/大火）；识别 秒/分钟。</div>
+        <textarea id="recipeInput" placeholder="示例：&#10;锅包肉&#10;1、热锅中火倒油 10秒&#10;2、下肉片翻炒 30秒&#10;3、加入糖醋汁 大火收汁 40秒"></textarea>
+        <div class="row">
+          <button class="btn" id="btnParse">解析并保存</button>
+          <button class="btn secondary" id="btnLoad">加载已保存菜谱</button>
+        </div>
+        <div class="muted">已选菜谱</div>
+        <select id="recipeSelect"></select>
+      </div>
+
+      <!-- 中：3D 视图 -->
       <div id="view3d">
         <div id="hud">
           <div class="chip" id="chipTemp">锅温：25°C</div>
@@ -64,11 +187,10 @@
         <canvas id="canvas"></canvas>
       </div>
 
-      <div id="panel">
-        <div class="title">控制面板</div>
-        <div class="muted">拖拽食材到锅里；火力滑杆控制火焰和锅温。练习按“当前步骤”走，系统会判定你是否完成。</div>
-
-        <div class="hr"></div>
+      <!-- 右：步骤/动作/操作区域 -->
+      <div class="card" style="display:flex; flex-direction:column; gap:10px; overflow:auto;">
+        <div class="title" style="font-size:14px">练习控制</div>
+        <div class="muted">按步骤完成：拖拽素材 + 选择动作 + 输入时长。系统会判定是否完成本步。</div>
 
         <div class="row">
           <button class="btn" id="btnPractice">练习模式</button>
@@ -80,53 +202,75 @@
             <div class="muted">当前步骤</div>
             <div class="muted mono" id="stepIndex">-/-</div>
           </div>
-          <div style="margin-top:6px;font-size:14px;font-weight:700" id="stepText">暂无步骤</div>
+          <div style="margin-top:6px;font-size:14px;font-weight:900" id="stepText">暂无步骤</div>
           <div class="muted" style="margin-top:6px" id="stepRule">完成条件：-</div>
 
           <div class="row" style="margin-top:10px">
             <button class="btn secondary" id="btnPrev">上一步</button>
             <button class="btn" id="btnNext">完成并下一步</button>
           </div>
-
-          <div class="row">
-            <button class="btn secondary" id="btnStir">翻炒（+进度）</button>
-            <div class="muted mono" id="stirProg">0%</div>
-          </div>
         </div>
 
         <div class="hr"></div>
 
-        <div class="muted">火力</div>
+        <div class="title" style="font-size:14px">操作区域（把素材拖到这里）</div>
+        <div class="zones">
+          <div class="zone" id="zonePan" data-zone="pan">
+            <div class="ztitle"><span>🍳 锅</span><span class="muted mono" id="cntPan">0</span></div>
+            <div class="muted">下锅/翻炒/收汁</div>
+            <div class="zlist" id="listPan"></div>
+          </div>
+
+          <div class="zone" id="zoneBowl" data-zone="bowl">
+            <div class="ztitle"><span>🥣 碗</span><span class="muted mono" id="cntBowl">0</span></div>
+            <div class="muted">调汁/裹粉/腌制</div>
+            <div class="zlist" id="listBowl"></div>
+          </div>
+
+          <div class="zone" id="zoneBoard" data-zone="board">
+            <div class="ztitle"><span>🔪 砧板</span><span class="muted mono" id="cntBoard">0</span></div>
+            <div class="muted">切配/备料</div>
+            <div class="zlist" id="listBoard"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn secondary" id="btnClearZones">清空操作区</button>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="title" style="font-size:14px">动作面板（你说的“点动作+输入时间”）</div>
+
+        <div class="muted">火力（也会参与步骤判定）</div>
         <div class="row">
           <input id="heat" type="range" min="0" max="100" value="40" />
         </div>
         <div class="muted" id="heatLabel">中火（40）</div>
 
-        <div class="hr"></div>
-
-        <div class="title" style="font-size:14px">导入菜谱文本</div>
-        <div class="muted">粘贴做法即可。识别规则是简化版：识别“1、2、3…”编号步骤；识别火力词（小火/中火/大火）；识别“秒/分钟”。</div>
-        <textarea id="recipeInput" placeholder="示例：&#10;锅包肉&#10;1、热锅中火倒油 10秒&#10;2、下肉片翻炒 30秒&#10;3、加入糖醋汁 大火收汁 40秒"></textarea>
-
         <div class="row">
-          <button class="btn" id="btnParse">解析并保存</button>
-          <button class="btn secondary" id="btnLoad">加载已保存菜谱</button>
+          <select id="actionSelect">
+            <option value="stir">翻炒</option>
+            <option value="wait">等待/焖/煮</option>
+            <option value="plate">装盘</option>
+          </select>
+          <input id="actionSec" type="number" min="0" value="10" />
+        </div>
+        <div class="row" style="margin-top:0">
+          <button class="btn" id="btnDoAction">执行动作（记录）</button>
+          <div class="muted mono" id="actionEcho">-</div>
         </div>
 
-        <div class="muted">已选菜谱</div>
-        <select id="recipeSelect"></select>
-
         <div class="hr"></div>
 
-        <div class="muted">操作日志（用于后续考试自动评分）</div>
-        <div class="stepBox" style="max-height:180px; overflow:auto" id="logBox"></div>
+        <div class="muted">操作日志（后续考试自动评分用这个）</div>
+        <div class="stepBox logBox" id="logBox"></div>
       </div>
     </div>
   </div>
 
   <script type="module" src="./app.js"></script>
   <script>
-    // 注册 Service Worker（PWA离线缓存）
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
     }
