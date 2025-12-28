@@ -265,4 +265,501 @@ function renderZones(){
 }
 renderZones();
 
-function clearZones()
+function clearZones(){
+  zoneState.pan = [];
+  zoneState.bowl = [];
+  zoneState.board = [];
+  renderZones();
+  // 3D锅里也清一下（下面会有 panContents3D）
+  clearPan3D();
+  log('zones_clear');
+}
+el.btnClearZones.addEventListener('click', clearZones);
+
+/** =======================
+ *  资源库渲染（含上传图片 B）
+ *  ======================= */
+let activeAssetTab = 'ingredient'; // ingredient | seasoning
+
+function setTab(tab){
+  activeAssetTab = tab;
+  el.tabIng.classList.toggle('active', tab === 'ingredient');
+  el.tabSea.classList.toggle('active', tab === 'seasoning');
+  renderAssets();
+}
+el.tabIng.addEventListener('click', ()=>setTab('ingredient'));
+el.tabSea.addEventListener('click', ()=>setTab('seasoning'));
+el.assetSearch.addEventListener('input', renderAssets);
+
+function createHiddenFileInput(onFile){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.style.display = 'none';
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const dataURL = await fileToDataURL(file);
+    onFile(dataURL);
+    input.value = '';
+  });
+  document.body.appendChild(input);
+  return input;
+}
+function fileToDataURL(file){
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result));
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+const uploadInput = createHiddenFileInput(()=>{});
+
+function renderAssets(){
+  const q = (el.assetSearch.value || '').trim();
+  const list = ASSETS.filter(a => a.type === activeAssetTab)
+    .filter(a => !q || a.name.includes(q) || a.keywords?.some(k=>k.includes(q)));
+
+  el.assetGrid.innerHTML = '';
+  for (const a of list){
+    const wrap = document.createElement('div');
+    wrap.className = 'asset';
+    wrap.draggable = true;
+
+    // drag payload
+    wrap.addEventListener('dragstart', (ev) => {
+      ev.dataTransfer.setData('text/plain', JSON.stringify({ assetId: a.id }));
+      ev.dataTransfer.effectAllowed = 'copy';
+      log('drag_asset', { assetId: a.id, name: a.name });
+    });
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    const imgUrl = assetImgs[a.id];
+    if (imgUrl){
+      const img = document.createElement('img');
+      img.src = imgUrl;
+      thumb.appendChild(img);
+    } else {
+      thumb.textContent = a.emoji || '🍽️';
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<div class="name">${a.name}</div><div class="type">${a.type === 'ingredient' ? '食材' : '调料'}</div>`;
+
+    const right = document.createElement('div');
+    right.style.display = 'flex';
+    right.style.flexDirection = 'column';
+    right.style.gap = '6px';
+
+    // B：上传图片
+    const btnUp = document.createElement('button');
+    btnUp.className = 'btn secondary small';
+    btnUp.textContent = '上传图';
+    btnUp.addEventListener('click', (e) => {
+      e.stopPropagation();
+      uploadInput.onchange = null;
+      uploadInput.onchange = async () => {}; // 兜底
+      // 用我们自己的 input（避免多个 input）
+      uploadInput.onchange = null;
+      uploadInput.addEventListener('change', async function handler(){
+        uploadInput.removeEventListener('change', handler);
+        const file = uploadInput.files?.[0];
+        if (!file) return;
+        const dataURL = await fileToDataURL(file);
+        assetImgs[a.id] = dataURL;
+        saveJSON(KEY_ASSET_IMG, assetImgs);
+        renderAssets();
+        log('asset_image_set', { assetId: a.id });
+      }, { once:true });
+      uploadInput.click();
+    });
+
+    // 清除图片回到A
+    const btnClr = document.createElement('button');
+    btnClr.className = 'btn secondary small';
+    btnClr.textContent = '还原';
+    btnClr.addEventListener('click', (e) => {
+      e.stopPropagation();
+      delete assetImgs[a.id];
+      saveJSON(KEY_ASSET_IMG, assetImgs);
+      renderAssets();
+      log('asset_image_clear', { assetId: a.id });
+    });
+
+    right.appendChild(btnUp);
+    right.appendChild(btnClr);
+
+    wrap.appendChild(thumb);
+    wrap.appendChild(meta);
+    wrap.appendChild(right);
+    el.assetGrid.appendChild(wrap);
+  }
+}
+renderAssets();
+
+/** =======================
+ *  Drop zones drag/drop
+ *  ======================= */
+function setZoneActive(zoneEl, active){
+  zoneEl.classList.toggle('active', active);
+}
+function makeZoneDrop(zoneEl, zoneName){
+  zoneEl.addEventListener('dragover', (ev) => { ev.preventDefault(); setZoneActive(zoneEl, true); });
+  zoneEl.addEventListener('dragleave', () => setZoneActive(zoneEl, false));
+  zoneEl.addEventListener('drop', (ev) => {
+    ev.preventDefault();
+    setZoneActive(zoneEl, false);
+
+    let payload = null;
+    try { payload = JSON.parse(ev.dataTransfer.getData('text/plain') || '{}'); } catch {}
+    const assetId = payload?.assetId;
+    const a = ASSETS.find(x=>x.id===assetId);
+    if (!a) return;
+
+    const item = { assetId, label: a.name };
+    zoneState[zoneName].push(item);
+    renderZones();
+
+    // 记录本步骤 drop（用于判定）
+    stepSession.drops.push({ assetId, to: zoneName });
+    log('drop', { assetId, to: zoneName });
+
+    // 3D里：如果是丢进锅，就生成一点小方块“进锅”
+    if (zoneName === 'pan') addToPan3D(a);
+
+    setHint(`已放入：${a.name} → ${zoneName==='pan'?'锅':zoneName==='bowl'?'碗':'砧板'}`);
+  });
+}
+makeZoneDrop(el.zonePan, 'pan');
+makeZoneDrop(el.zoneBowl, 'bowl');
+makeZoneDrop(el.zoneBoard, 'board');
+
+/** =======================
+ *  动作面板（点动作+输入秒数）
+ *  ======================= */
+el.btnDoAction.addEventListener('click', () => {
+  const action = el.actionSelect.value;
+  const sec = Math.max(0, parseInt(el.actionSec.value || '0', 10));
+
+  stepSession.actions.push({ action, sec, heat: heatNameFromValue(heat).name });
+  log('action', { action, sec, heat: heatNameFromValue(heat).name });
+
+  el.actionEcho.textContent = `${action} ${sec}s`;
+
+  // 如果当前是翻炒步骤，我们用“累加秒数”做达标判定
+  if (action === 'stir') {
+    stirAccumSec += sec;
+    setHint(`翻炒累计：${stirAccumSec}s`);
+  }
+  // plate
+  if (action === 'plate') {
+    plated = true;
+    setHint('已装盘（可尝试完成步骤）');
+  }
+});
+
+/** =======================
+ *  火力/温度
+ *  ======================= */
+let heat = 40;
+let panTemp = 25;
+const AMBIENT = 25;
+
+function heatNameFromValue(v){
+  if (v < 25) return { name:'小火' };
+  if (v < 70) return { name:'中火' };
+  return { name:'大火' };
+}
+function heatToTargetTemp(v){
+  return 25 + (v/100) * 235;
+}
+function updateHeatUI(){
+  const hn = heatNameFromValue(heat).name;
+  el.heatLabel.textContent = `${hn}（${heat}）`;
+}
+el.heat.addEventListener('input', () => {
+  heat = parseInt(el.heat.value, 10);
+  updateHeatUI();
+  log('set_heat', { heat, name: heatNameFromValue(heat).name });
+});
+updateHeatUI();
+
+/** =======================
+ *  练习模式：步骤状态机
+ *  ======================= */
+let mode = 'practice';
+let stepIdx = 0;
+
+// 用于判定 stir/plate 步骤
+let stirAccumSec = 0;
+let plated = false;
+
+function resetStepSession(){
+  stepSession = { drops: [], actions: [] };
+  stirAccumSec = 0;
+  plated = false;
+}
+
+function renderStep(){
+  const r = getActiveRecipe();
+  if (!r) {
+    el.stepIndex.textContent = '-/-';
+    el.stepText.textContent = '暂无步骤';
+    el.stepRule.textContent = '完成条件：-';
+    setHint('提示：先导入菜谱');
+    return;
+  }
+  const step = r.steps[stepIdx];
+  el.stepIndex.textContent = `${stepIdx+1}/${r.steps.length}`;
+  el.stepText.textContent = step.text;
+
+  let rule = '';
+  if (step.type === 'set_heat') rule = `把火力调到：${step.heat}`;
+  else if (step.type === 'add') {
+    const name = step.targetAssetId ? (ASSETS.find(a=>a.id===step.targetAssetId)?.name || '素材') : '任意素材';
+    const to = step.toZone === 'bowl' ? '碗' : '锅';
+    rule = `把【${name}】拖到【${to}】`;
+  }
+  else if (step.type === 'stir') rule = `执行动作：翻炒累计 ≥ ${step.durationSec}s`;
+  else if (step.type === 'plate') rule = `执行动作：装盘`;
+  else rule = `执行动作：等待/操作（不严格）`;
+
+  el.stepRule.textContent = `完成条件：${rule}`;
+  setHint(`当前：${rule}`);
+
+  resetStepSession();
+}
+
+function canCompleteCurrentStep(){
+  const r = getActiveRecipe();
+  if (!r) return false;
+  const step = r.steps[stepIdx];
+
+  if (step.type === 'set_heat') {
+    const current = heatNameFromValue(heat).name;
+    return current === step.heat;
+  }
+
+  if (step.type === 'add') {
+    const needId = step.targetAssetId;
+    const needZone = step.toZone || 'pan';
+
+    // 本步骤内是否有对应 drop
+    const ok = stepSession.drops.some(d => {
+      if (needZone && d.to !== needZone) return false;
+      if (!needId) return true;       // 未识别目标时：任意素材都算
+      return d.assetId === needId;
+    });
+    return ok;
+  }
+
+  if (step.type === 'stir') {
+    return stirAccumSec >= (step.durationSec || 0);
+  }
+
+  if (step.type === 'plate') {
+    return plated === true;
+  }
+
+  return true;
+}
+
+function completeAndNext(){
+  const r = getActiveRecipe();
+  if (!r) return;
+
+  if (!canCompleteCurrentStep()){
+    setHint('还没完成：按“完成条件”操作（拖拽/火力/动作）');
+    return;
+  }
+
+  log('step_complete', { idx: stepIdx+1, type: r.steps[stepIdx].type });
+
+  // 最后一步结算少量XP（升级慢）
+  if (stepIdx === r.steps.length - 1) {
+    const gain = Math.max(1, Math.min(3, Math.floor(r.steps.length / 6))); // 1~3 XP
+    profile.xp += gain;
+    saveJSON(KEY_PROFILE, profile);
+    renderLevel();
+    setHint(`通关完成！获得 XP +${gain}（升级很慢）`);
+    log('finish_recipe', { title: r.title, gain, xp: profile.xp });
+    return;
+  }
+
+  stepIdx = Math.min(r.steps.length - 1, stepIdx + 1);
+  renderStep();
+}
+
+el.btnPractice.addEventListener('click', () => {
+  mode = 'practice';
+  stepIdx = 0;
+  renderStep();
+  log('mode_practice');
+  setHint('练习模式：按步骤完成操作');
+});
+
+el.btnPrev.addEventListener('click', () => {
+  const r = getActiveRecipe();
+  if (!r) return;
+  stepIdx = Math.max(0, stepIdx - 1);
+  renderStep();
+  log('step_prev', { idx: stepIdx+1 });
+});
+
+el.btnNext.addEventListener('click', completeAndNext);
+
+/** =======================
+ *  菜谱导入/加载
+ *  ======================= */
+el.btnParse.addEventListener('click', () => {
+  const r = parseRecipeText(el.recipeInput.value);
+  if (!r) { setHint('导入失败：文本为空'); return; }
+  upsertRecipe(r);
+  el.recipeInput.value = '';
+  stepIdx = 0;
+  renderStep();
+  log('recipe_saved', { title: r.title, steps: r.steps.length });
+  setHint(`已保存：${r.title}`);
+});
+
+el.btnLoad.addEventListener('click', () => {
+  recipes = loadJSON(KEY_RECIPES, []);
+  activeRecipeId = loadJSON(KEY_ACTIVE, null);
+  refreshRecipeSelect();
+  stepIdx = 0;
+  renderStep();
+  log('recipes_loaded');
+  setHint('已加载本地菜谱');
+});
+
+el.recipeSelect.addEventListener('change', () => {
+  activeRecipeId = el.recipeSelect.value;
+  saveJSON(KEY_ACTIVE, activeRecipeId);
+  stepIdx = 0;
+  renderStep();
+  log('select_recipe', { id: activeRecipeId });
+});
+
+/** =======================
+ *  重置
+ *  ======================= */
+el.btnReset.addEventListener('click', () => {
+  if (!confirm('确定清空本地菜谱/经验/图片吗？')) return;
+  localStorage.removeItem(KEY_RECIPES);
+  localStorage.removeItem(KEY_PROFILE);
+  localStorage.removeItem(KEY_ACTIVE);
+  localStorage.removeItem(KEY_ASSET_IMG);
+  location.reload();
+});
+
+/** =======================
+ *  Three.js：保留“3D锅/火焰/温度”作为游戏背景
+ *  丢进锅会生成小方块表示“入锅”
+ *  ======================= */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0a09);
+
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+camera.position.set(0, 5.5, 7.5);
+camera.lookAt(0, 0.8, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: el.canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+
+const light1 = new THREE.DirectionalLight(0xffffff, 1.2);
+light1.position.set(4, 8, 3);
+scene.add(light1);
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+// 灶台
+const stove = new THREE.Mesh(
+  new THREE.BoxGeometry(8, 0.6, 6),
+  new THREE.MeshStandardMaterial({ color: 0x14110f, metalness: 0.2, roughness: 0.8 })
+);
+stove.position.y = -0.3;
+scene.add(stove);
+
+// 锅
+const pan = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.45, 1.65, 0.55, 32, 1, true),
+  new THREE.MeshStandardMaterial({ color: 0x2a2725, metalness: 0.4, roughness: 0.65, side: THREE.DoubleSide })
+);
+pan.position.set(0, 0.35, 0);
+scene.add(pan);
+
+const panBase = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.2, 1.2, 0.08, 32),
+  new THREE.MeshStandardMaterial({ color: 0x1f1c1a, metalness: 0.2, roughness: 0.8 })
+);
+panBase.position.set(0, 0.1, 0);
+scene.add(panBase);
+
+// 火焰
+const flame = new THREE.Mesh(
+  new THREE.ConeGeometry(0.65, 1.3, 24),
+  new THREE.MeshStandardMaterial({ color: 0xff7a00, emissive: 0xff6a00, emissiveIntensity: 1.1, roughness: 0.6 })
+);
+flame.position.set(0, 0.0, 0);
+scene.add(flame);
+
+// 锅内食材（3D显示）
+const panItems3D = [];
+function addToPan3D(asset){
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(0.28, 0.28, 0.28),
+    new THREE.MeshStandardMaterial({ color: asset.color ?? 0xffffff, roughness: 0.7 })
+  );
+  m.position.set((Math.random()*0.8 - 0.4), 0.35, (Math.random()*0.8 - 0.4));
+  scene.add(m);
+  panItems3D.push(m);
+}
+function clearPan3D(){
+  for (const m of panItems3D) scene.remove(m);
+  panItems3D.length = 0;
+}
+
+function resize(){
+  const rect = el.canvas.getBoundingClientRect();
+  renderer.setSize(rect.width, rect.height, false);
+  camera.aspect = rect.width / rect.height;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+requestAnimationFrame(resize);
+
+let last = performance.now();
+function animate(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  // 火焰大小
+  const s = 0.25 + (heat/100) * 1.2;
+  flame.scale.set(s, s, s);
+  flame.visible = heat > 0;
+
+  // 温度逼近
+  const targetTemp = heatToTargetTemp(heat);
+  const k = 1 - Math.exp(-dt * 0.9);
+  panTemp = panTemp + (targetTemp - panTemp) * k;
+
+  el.chipTemp.textContent = `锅温：${Math.round(panTemp)}°C`;
+
+  // 锅颜色热感
+  const warm = Math.min(1, Math.max(0, (panTemp - 60) / 140));
+  pan.material.color.setRGB(0.16 + warm*0.22, 0.15 + warm*0.10, 0.14);
+  panBase.material.color.setRGB(0.14 + warm*0.18, 0.13 + warm*0.08, 0.12);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+/** =======================
+ *  初始化
+ *  ======================= */
+renderStep();
+setHint(recipes.length ? '提示：拖拽素材到“锅/碗/砧板”，再按步骤完成' : '提示：先导入菜谱');
