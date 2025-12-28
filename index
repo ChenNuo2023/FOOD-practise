@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0a09" />
+  <title>炒菜修炼 3D v0.1</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="https://dummyimage.com/192x192/111/fff&text=Cook" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <style>
+    html, body { height:100%; margin:0; background:#0c0a09; color:#fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .safe-top { padding-top: calc(env(safe-area-inset-top) + 10px); }
+    .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 10px); }
+    #wrap { height:100%; display:flex; flex-direction:column; }
+    #topbar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 12px 8px; }
+    #main { flex:1; display:grid; grid-template-columns: 1fr 340px; gap:12px; padding: 0 12px 12px; }
+    @media (max-width: 980px) { #main { grid-template-columns: 1fr; } }
+
+    #view3d { position:relative; border:1px solid rgba(255,255,255,0.10); border-radius:18px; overflow:hidden; background:#0b0a09; min-height: 380px; }
+    #hud { position:absolute; left:12px; top:12px; right:12px; display:flex; justify-content:space-between; pointer-events:none; }
+    .chip { pointer-events:none; padding:8px 10px; border-radius:999px; background: rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.10); font-size:12px; }
+    #canvas { width:100%; height:100%; display:block; }
+
+    #panel { border:1px solid rgba(255,255,255,0.10); border-radius:18px; padding:12px; background: rgba(255,255,255,0.03); }
+    .row { display:flex; gap:10px; align-items:center; margin:10px 0; }
+    .btn { cursor:pointer; border:none; padding:10px 12px; border-radius:12px; background:#e7e5e4; color:#0c0a09; font-weight:700; }
+    .btn.secondary { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.16); font-weight:600; }
+    .btn:disabled { opacity:0.45; cursor:not-allowed; }
+    input[type="range"]{ width:100%; }
+    textarea { width:100%; min-height:120px; border-radius:12px; padding:10px; background:#0c0a09; color:#fff; border:1px solid rgba(255,255,255,0.12); outline:none; }
+    select, input[type="text"]{ width:100%; border-radius:12px; padding:10px; background:#0c0a09; color:#fff; border:1px solid rgba(255,255,255,0.12); outline:none; }
+
+    .title { font-size:15px; font-weight:800; }
+    .muted { color: rgba(255,255,255,0.65); font-size:12px; line-height:1.4; }
+    .hr { height:1px; background: rgba(255,255,255,0.10); margin:12px 0; }
+
+    .stepBox { border:1px solid rgba(255,255,255,0.10); border-radius:14px; padding:10px; background: rgba(0,0,0,0.25); }
+    .stepLine { display:flex; justify-content:space-between; gap:10px; }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  </style>
+</head>
+
+<body class="safe-top safe-bottom">
+  <div id="wrap">
+    <div id="topbar">
+      <div>
+        <div class="title">炒菜修炼 3D v0.1</div>
+        <div class="muted" id="levelText">等级：入灶期 · XP 0</div>
+      </div>
+      <button class="btn secondary" id="btnReset">重置本地数据</button>
+    </div>
+
+    <div id="main">
+      <div id="view3d">
+        <div id="hud">
+          <div class="chip" id="chipTemp">锅温：25°C</div>
+          <div class="chip" id="chipHint">提示：先导入菜谱</div>
+        </div>
+        <canvas id="canvas"></canvas>
+      </div>
+
+      <div id="panel">
+        <div class="title">控制面板</div>
+        <div class="muted">拖拽食材到锅里；火力滑杆控制火焰和锅温。练习按“当前步骤”走，系统会判定你是否完成。</div>
+
+        <div class="hr"></div>
+
+        <div class="row">
+          <button class="btn" id="btnPractice">练习模式</button>
+          <button class="btn secondary" id="btnExam" disabled>考试模式（下一版）</button>
+        </div>
+
+        <div class="stepBox">
+          <div class="stepLine">
+            <div class="muted">当前步骤</div>
+            <div class="muted mono" id="stepIndex">-/-</div>
+          </div>
+          <div style="margin-top:6px;font-size:14px;font-weight:700" id="stepText">暂无步骤</div>
+          <div class="muted" style="margin-top:6px" id="stepRule">完成条件：-</div>
+
+          <div class="row" style="margin-top:10px">
+            <button class="btn secondary" id="btnPrev">上一步</button>
+            <button class="btn" id="btnNext">完成并下一步</button>
+          </div>
+
+          <div class="row">
+            <button class="btn secondary" id="btnStir">翻炒（+进度）</button>
+            <div class="muted mono" id="stirProg">0%</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="muted">火力</div>
+        <div class="row">
+          <input id="heat" type="range" min="0" max="100" value="40" />
+        </div>
+        <div class="muted" id="heatLabel">中火（40）</div>
+
+        <div class="hr"></div>
+
+        <div class="title" style="font-size:14px">导入菜谱文本</div>
+        <div class="muted">粘贴做法即可。识别规则是简化版：识别“1、2、3…”编号步骤；识别火力词（小火/中火/大火）；识别“秒/分钟”。</div>
+        <textarea id="recipeInput" placeholder="示例：&#10;锅包肉&#10;1、热锅中火倒油 10秒&#10;2、下肉片翻炒 30秒&#10;3、加入糖醋汁 大火收汁 40秒"></textarea>
+
+        <div class="row">
+          <button class="btn" id="btnParse">解析并保存</button>
+          <button class="btn secondary" id="btnLoad">加载已保存菜谱</button>
+        </div>
+
+        <div class="muted">已选菜谱</div>
+        <select id="recipeSelect"></select>
+
+        <div class="hr"></div>
+
+        <div class="muted">操作日志（用于后续考试自动评分）</div>
+        <div class="stepBox" style="max-height:180px; overflow:auto" id="logBox"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+  <script>
+    // 注册 Service Worker（PWA离线缓存）
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+    }
+  </script>
+</body>
+</html>
