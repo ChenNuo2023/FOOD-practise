@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cook-3d-v01';
+const CACHE_NAME = 'cook-3d-v02';
 const ASSETS = [
   './',
   './index.html',
